@@ -276,6 +276,16 @@ export default function App() {
     }
   };
 
+  const handleKembali = () => {
+    if (window.parent !== window) {
+      // Dibuka lewat launcher (iframe): minta launcher kembali ke halaman sebelumnya
+      window.parent.postMessage({ type: "SISWA_KEMBALI" }, "*");
+    } else {
+      // Dibuka langsung di browser: kembali ke halaman sebelumnya
+      window.history.back();
+    }
+  };
+
   const handleLogout = () => {
     sessionStorage.removeItem("isLoggedIn");
     setIsLoggedIn(false);
@@ -439,6 +449,13 @@ export default function App() {
           {loginError && <p style={styles.pesan}>{loginError}</p>}
           <button type="submit" style={styles.buttonPrimary}>
             Masuk
+          </button>
+          <button
+            type="button"
+            style={styles.buttonSecondary}
+            onClick={handleKembali}
+          >
+            ← Kembali
           </button>
         </form>
       </div>
