@@ -3,7 +3,7 @@ import * as XLSX from "xlsx";
 
 // GANTI dengan URL Web App hasil deploy Google Apps Script kamu
 const API_URL =
-  "https://script.google.com/macros/s/AKfycbzyBKRmPc9gxejvZGUix6Nb4dSdshVXuaI1LWnuRfZx8eS1Cts5kyh1vxUijLOk5elMfQ/exec";
+  "https://script.google.com/macros/s/AKfycbz8iQvJZhIAFS48tuJTjQZskEN9envcQAlfgU4HvZTF-3EFlBs_w-aA4M5vo2MdBgQHLw/exec";
 
 // Kredensial login (disimpan langsung di kode)
 const CREDENTIALS = {
@@ -30,7 +30,13 @@ export default function App() {
   const [submitting, setSubmitting] = useState<boolean>(false);
   const [pesan, setPesan] = useState<string>("");
   const [editIndex, setEditIndex] = useState<number | null>(null);
+  const [nisnLama, setNisnLama] = useState<string>("");
   const [importing, setImporting] = useState<boolean>(false);
+  const [deletingAll, setDeletingAll] = useState<boolean>(false);
+  const [selected, setSelected] = useState<string[]>([]);
+  const [deletingSelected, setDeletingSelected] = useState<boolean>(false);
+  const [filterNama, setFilterNama] = useState<string>("");
+  const [filterKelas, setFilterKelas] = useState<string>("");
   const [downloadingTemplate, setDownloadingTemplate] =
     useState<boolean>(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -48,6 +54,7 @@ export default function App() {
       const json = await res.json();
       if (json.status === "success") {
         setDataSiswa(json.data);
+        setSelected([]);
       } else {
         setPesan("Gagal mengambil data: " + json.message);
       }
@@ -67,6 +74,7 @@ export default function App() {
   const resetForm = () => {
     setForm({ nisn: "", nama: "", kelas: "" });
     setEditIndex(null);
+    setNisnLama("");
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -87,6 +95,9 @@ export default function App() {
       body.append("nisn", form.nisn);
       body.append("nama", form.nama);
       body.append("kelas", form.kelas);
+      if (editIndex !== null) {
+        body.append("nisnLama", nisnLama);
+      }
 
       const res = await fetch(API_URL, {
         method: "POST",
@@ -117,6 +128,7 @@ export default function App() {
     const item = dataSiswa[index];
     setForm({ nisn: item.nisn, nama: item.nama, kelas: item.kelas });
     setEditIndex(index);
+    setNisnLama(item.nisn);
     setPesan("");
   };
 
@@ -146,6 +158,102 @@ export default function App() {
       console.error(err);
     } finally {
       setSubmitting(false);
+    }
+  };
+
+  const toggleSelect = (nisn: string) => {
+    setSelected((prev) =>
+      prev.indexOf(nisn) !== -1
+        ? prev.filter((n) => n !== nisn)
+        : [...prev, nisn]
+    );
+  };
+
+  const toggleSelectAll = () => {
+    if (selected.length === dataTampil.length) {
+      setSelected([]);
+    } else {
+      setSelected(dataTampil.map((s) => s.nisn));
+    }
+  };
+
+  const handleDeleteSelected = async () => {
+    if (selected.length === 0) {
+      setPesan("Belum ada data siswa yang diceklis.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Hapus ${selected.length} data siswa yang diceklis? Tindakan ini tidak bisa dibatalkan.`
+      )
+    )
+      return;
+
+    setDeletingSelected(true);
+    setPesan("");
+    try {
+      const body = new URLSearchParams();
+      body.append("action", "deleteSelectedData");
+      body.append("nisnList", JSON.stringify(selected));
+
+      const res = await fetch(API_URL, {
+        method: "POST",
+        body,
+      });
+      const json = await res.json();
+
+      if (json.status === "success") {
+        setPesan(json.message);
+        resetForm();
+        ambilData();
+      } else {
+        setPesan("Gagal menghapus data terpilih: " + json.message);
+      }
+    } catch (err) {
+      setPesan("Terjadi kesalahan saat menghapus data terpilih.");
+      console.error(err);
+    } finally {
+      setDeletingSelected(false);
+    }
+  };
+
+  const handleDeleteAll = async () => {
+    if (dataSiswa.length === 0) {
+      setPesan("Tidak ada data siswa untuk dihapus.");
+      return;
+    }
+    if (
+      !window.confirm(
+        `Hapus SEMUA data siswa (${dataSiswa.length} data)? Tindakan ini tidak bisa dibatalkan.`
+      )
+    )
+      return;
+    if (!window.confirm("Apakah Anda benar-benar yakin?")) return;
+
+    setDeletingAll(true);
+    setPesan("");
+    try {
+      const body = new URLSearchParams();
+      body.append("action", "deleteAllData");
+
+      const res = await fetch(API_URL, {
+        method: "POST",
+        body,
+      });
+      const json = await res.json();
+
+      if (json.status === "success") {
+        setPesan(json.message);
+        resetForm();
+        ambilData();
+      } else {
+        setPesan("Gagal menghapus semua data: " + json.message);
+      }
+    } catch (err) {
+      setPesan("Terjadi kesalahan saat menghapus semua data.");
+      console.error(err);
+    } finally {
+      setDeletingAll(false);
     }
   };
 
@@ -289,6 +397,17 @@ export default function App() {
     }
   };
 
+  const daftarKelas = Array.from(new Set(dataSiswa.map((s) => s.kelas))).sort(
+    (a, b) => a.localeCompare(b, undefined, { numeric: true })
+  );
+
+  const dataTampil = dataSiswa.filter(
+    (s) =>
+      (filterNama.trim() === "" ||
+        s.nama.toLowerCase().includes(filterNama.trim().toLowerCase())) &&
+      (filterKelas === "" || s.kelas === filterKelas)
+  );
+
   if (!isLoggedIn) {
     return (
       <div style={styles.loginContainer}>
@@ -349,7 +468,6 @@ export default function App() {
             onChange={handleChange}
             style={styles.input}
             placeholder="Masukkan NISN"
-            disabled={editIndex !== null}
           />
         </div>
 
@@ -438,16 +556,99 @@ export default function App() {
         </div>
       </div>
 
+      <div style={styles.buttonRow}>
+        <button
+          type="button"
+          style={styles.buttonDeleteAll}
+          onClick={handleDeleteAll}
+          disabled={deletingAll}
+        >
+          {deletingAll ? "Menghapus..." : "Hapus Semua Data Siswa"}
+        </button>
+        <button
+          type="button"
+          style={styles.buttonDeleteAll}
+          onClick={handleDeleteSelected}
+          disabled={deletingSelected || selected.length === 0}
+        >
+          {deletingSelected
+            ? "Menghapus..."
+            : `Hapus Terpilih (${selected.length})`}
+        </button>
+      </div>
+
       <h2 style={styles.subtitle}>Daftar Siswa</h2>
+
+      <div style={styles.filterRow}>
+        <input
+          type="text"
+          list="daftar-nama"
+          value={filterNama}
+          onChange={(e) => {
+            setFilterNama(e.target.value);
+            setSelected([]);
+          }}
+          style={{ ...styles.input, flex: 1, minWidth: 180 }}
+          placeholder="Cari / pilih nama siswa"
+        />
+        <datalist id="daftar-nama">
+          {dataSiswa.map((s, i) => (
+            <option key={s.nisn + i} value={s.nama} />
+          ))}
+        </datalist>
+
+        <select
+          value={filterKelas}
+          onChange={(e) => {
+            setFilterKelas(e.target.value);
+            setSelected([]);
+          }}
+          style={styles.input}
+        >
+          <option value="">Semua Kelas</option>
+          {daftarKelas.map((k) => (
+            <option key={k} value={k}>
+              Kelas {k}
+            </option>
+          ))}
+        </select>
+
+        {(filterNama !== "" || filterKelas !== "") && (
+          <button
+            type="button"
+            style={styles.buttonSecondary}
+            onClick={() => {
+              setFilterNama("");
+              setFilterKelas("");
+              setSelected([]);
+            }}
+          >
+            Reset Filter
+          </button>
+        )}
+      </div>
 
       {loading ? (
         <p>Memuat data...</p>
       ) : dataSiswa.length === 0 ? (
         <p>Belum ada data siswa.</p>
+      ) : dataTampil.length === 0 ? (
+        <p>Tidak ada data yang cocok dengan filter.</p>
       ) : (
         <table style={styles.table}>
           <thead>
             <tr>
+              <th style={styles.th}>
+                <input
+                  type="checkbox"
+                  checked={
+                    dataTampil.length > 0 &&
+                    selected.length === dataTampil.length
+                  }
+                  onChange={toggleSelectAll}
+                />
+              </th>
+              <th style={styles.th}>No</th>
               <th style={styles.th}>NISN</th>
               <th style={styles.th}>Nama</th>
               <th style={styles.th}>Kelas</th>
@@ -455,15 +656,23 @@ export default function App() {
             </tr>
           </thead>
           <tbody>
-            {dataSiswa.map((item, index) => (
+            {dataTampil.map((item, index) => (
               <tr key={item.nisn + index}>
+                <td style={styles.td}>
+                  <input
+                    type="checkbox"
+                    checked={selected.indexOf(item.nisn) !== -1}
+                    onChange={() => toggleSelect(item.nisn)}
+                  />
+                </td>
+                <td style={styles.td}>{index + 1}</td>
                 <td style={styles.td}>{item.nisn}</td>
                 <td style={styles.td}>{item.nama}</td>
                 <td style={styles.td}>{item.kelas}</td>
                 <td style={styles.td}>
                   <button
                     style={styles.buttonEdit}
-                    onClick={() => handleEdit(index)}
+                    onClick={() => handleEdit(dataSiswa.indexOf(item))}
                   >
                     Edit
                   </button>
@@ -615,6 +824,22 @@ const styles: { [key: string]: React.CSSProperties } = {
     borderRadius: "4px",
     cursor: "pointer",
     fontSize: "12px",
+  },
+  filterRow: {
+    display: "flex",
+    gap: "8px",
+    marginBottom: "12px",
+    flexWrap: "wrap",
+  },
+  buttonDeleteAll: {
+    padding: "10px 16px",
+    background: "#b91c1c",
+    color: "#fff",
+    border: "none",
+    borderRadius: "6px",
+    cursor: "pointer",
+    fontSize: "14px",
+    marginTop: "16px",
   },
   buttonDelete: {
     padding: "4px 10px",
