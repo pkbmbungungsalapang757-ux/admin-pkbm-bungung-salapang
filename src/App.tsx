@@ -290,6 +290,11 @@ export default function App() {
     sessionStorage.removeItem("isLoggedIn");
     setIsLoggedIn(false);
     setLoginForm({ username: "", password: "" });
+
+    // Kalau dibuka lewat launcher (iframe), kembali ke halaman awal launcher
+    if (window.parent !== window) {
+      window.parent.postMessage({ type: "PKBM_KEMBALI" }, "*");
+    }
   };
 
   const handleDownloadTemplate = async () => {
